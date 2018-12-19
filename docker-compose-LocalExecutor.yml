@@ -1,24 +1,28 @@
-version: '2.1'
+version: '3'
+
 services:
-    postgres:
-        image: postgres:9.6
-        environment:
-            - POSTGRES_USER=airflow
-            - POSTGRES_PASSWORD=airflow
-            - POSTGRES_DB=airflow
+    mssql:
+        image: microsoft/mssql-server-linux:latest
+        environment: 
+            - ACCEPT_EULA=Y
+            - SA_PASSWORD=YourStrong!Passw0rd
+        ports:
+            - 1433:1433
+        volumes:
+            - /var/opt/mssql
 
     webserver:
-        image: puckel/docker-airflow:1.10.1
+        image: docker-airflow:latest
         restart: always
         depends_on:
-            - postgres
+            - mssql
         environment:
             - LOAD_EX=n
             - EXECUTOR=Local
+            - AIRFLOW__CORE__SQL_ALCHEMY_CONN=${SQL_ALCHEMY_CONN}
+            - AIRFLOW__CELERY__RESULT_BACKEND=${CELERY_RESULTS_BACKEND}
         volumes:
             - ./dags:/usr/local/airflow/dags
-            # Uncomment to include custom plugins
-            # - ./plugins:/usr/local/airflow/plugins
         ports:
             - "8080:8080"
         command: webserver

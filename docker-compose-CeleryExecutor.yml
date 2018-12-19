@@ -1,38 +1,40 @@
-version: '2.1'
-services:
-    redis:
-        image: 'redis:3.2.7'
-        # command: redis-server --requirepass redispass
+version: '3'
 
-    postgres:
-        image: postgres:9.6
+services:
+    rabbitmq:
+        image: rabbitmq:3-management
+        hostname: rabbitmq
         environment:
-            - POSTGRES_USER=airflow
-            - POSTGRES_PASSWORD=airflow
-            - POSTGRES_DB=airflow
-        # Uncomment these lines to persist data on the local filesystem.
-        #     - PGDATA=/var/lib/postgresql/data/pgdata
-        # volumes:
-        #     - ./pgdata:/var/lib/postgresql/data/pgdata
+        - RABBITMQ_ERLANG_COOKIE=${RABBITMQ_ERLANG_COOKIE}
+        - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+        - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+        - RABBITMQ_DEFAULT_VHOST=${RABBITMQ_DEFAULT_VHOST}
+
+    mssql:
+        image: microsoft/mssql-server-linux:latest
+        environment: 
+            - ACCEPT_EULA=Y
+            - SA_PASSWORD=YourStrong!Passw0rd
+        ports:
+            - 1433:1433
+        volumes:
+            - /var/opt/mssql
 
     webserver:
-        image: puckel/docker-airflow:1.10.1
+        image: docker-airflow:latest
         restart: always
         depends_on:
-            - postgres
-            - redis
+            - mssql
+            - rabbitmq
         environment:
             - LOAD_EX=n
             - FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
             - EXECUTOR=Celery
-            # - POSTGRES_USER=airflow
-            # - POSTGRES_PASSWORD=airflow
-            # - POSTGRES_DB=airflow
-            # - REDIS_PASSWORD=redispass
+            - AIRFLOW__CELERY__BROKER_URL=${CELERY_RABBIT_BROKER}
+            - AIRFLOW__CORE__SQL_ALCHEMY_CONN=${SQL_ALCHEMY_CONN}
+            - AIRFLOW__CELERY__RESULT_BACKEND=${CELERY_RESULTS_BACKEND}
         volumes:
             - ./dags:/usr/local/airflow/dags
-            # Uncomment to include custom plugins
-            # - ./plugins:/usr/local/airflow/plugins
         ports:
             - "8080:8080"
         command: webserver
@@ -43,50 +45,46 @@ services:
             retries: 3
 
     flower:
-        image: puckel/docker-airflow:1.10.1
+        image: docker-airflow:latest
         restart: always
         depends_on:
-            - redis
+            - rabbitmq
         environment:
             - EXECUTOR=Celery
-            # - REDIS_PASSWORD=redispass
+            - AIRFLOW__CELERY__BROKER_URL=${CELERY_RABBIT_BROKER}
+            - AIRFLOW__CORE__SQL_ALCHEMY_CONN=${SQL_ALCHEMY_CONN}
+            - AIRFLOW__CELERY__RESULT_BACKEND=${CELERY_RESULTS_BACKEND}
         ports:
             - "5555:5555"
         command: flower
 
     scheduler:
-        image: puckel/docker-airflow:1.10.1
+        image: docker-airflow:latest
         restart: always
         depends_on:
             - webserver
         volumes:
             - ./dags:/usr/local/airflow/dags
-            # Uncomment to include custom plugins
-            # - ./plugins:/usr/local/airflow/plugins
         environment:
             - LOAD_EX=n
             - FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
             - EXECUTOR=Celery
-            # - POSTGRES_USER=airflow
-            # - POSTGRES_PASSWORD=airflow
-            # - POSTGRES_DB=airflow
-            # - REDIS_PASSWORD=redispass
+            - AIRFLOW__CELERY__BROKER_URL=${CELERY_RABBIT_BROKER}
+            - AIRFLOW__CORE__SQL_ALCHEMY_CONN=${SQL_ALCHEMY_CONN}
+            - AIRFLOW__CELERY__RESULT_BACKEND=${CELERY_RESULTS_BACKEND}
         command: scheduler
 
     worker:
-        image: puckel/docker-airflow:1.10.1
+        image: docker-airflow:latest
         restart: always
         depends_on:
             - scheduler
         volumes:
             - ./dags:/usr/local/airflow/dags
-            # Uncomment to include custom plugins
-            # - ./plugins:/usr/local/airflow/plugins
         environment:
             - FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
             - EXECUTOR=Celery
-            # - POSTGRES_USER=airflow
-            # - POSTGRES_PASSWORD=airflow
-            # - POSTGRES_DB=airflow
-            # - REDIS_PASSWORD=redispass
+            - AIRFLOW__CELERY__BROKER_URL=${CELERY_RABBIT_BROKER}
+            - AIRFLOW__CORE__SQL_ALCHEMY_CONN=${SQL_ALCHEMY_CONN}
+            - AIRFLOW__CELERY__RESULT_BACKEND=${CELERY_RESULTS_BACKEND}
         command: worker
