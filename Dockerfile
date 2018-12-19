@@ -5,7 +5,7 @@
 # SOURCE: https://github.com/puckel/docker-airflow
 
 FROM python:3.6-slim
-LABEL maintainer="Puckel_"
+LABEL maintainer="Alex Hagerman"
 
 # Never prompts the user for choices on installation/configuration of packages
 ENV DEBIAN_FRONTEND noninteractive
@@ -15,7 +15,7 @@ ENV TERM linux
 ARG AIRFLOW_VERSION=1.10.1
 ARG AIRFLOW_HOME=/usr/local/airflow
 ARG AIRFLOW_DEPS=""
-ARG PYTHON_DEPS=""
+ARG PYTHON_DEPS="pyodbc"
 ENV AIRFLOW_GPL_UNIDECODE yes
 
 # Define en_US.
@@ -24,6 +24,9 @@ ENV LANG en_US.UTF-8
 ENV LC_ALL en_US.UTF-8
 ENV LC_CTYPE en_US.UTF-8
 ENV LC_MESSAGES en_US.UTF-8
+
+# MS SQL EULA
+ENV ACCEPT_EULA=Y
 
 RUN set -ex \
     && buildDeps=' \
@@ -47,19 +50,40 @@ RUN set -ex \
         rsync \
         netcat \
         locales \
+        gnupg2 \
+        apt-transport-https \
     && sed -i 's/^# en_US.UTF-8 UTF-8$/en_US.UTF-8 UTF-8/g' /etc/locale.gen \
     && locale-gen \
     && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 \
-    && useradd -ms /bin/bash -d ${AIRFLOW_HOME} airflow \
-    && pip install -U pip setuptools wheel \
+    && useradd -ms /bin/bash -d ${AIRFLOW_HOME} airflow
+
+# Undocumented mssql dependency
+RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bash_profile 
+RUN echo "deb http://httpredir.debian.org/debian jessie main contrib non-free\n\
+deb-src http://httpredir.debian.org/debian jessie main contrib non-free\n\
+\n\
+deb http://security.debian.org/ jessie/updates main contrib non-free\n\
+deb-src http://security.debian.org/ jessie/updates main contrib non-free" >> /etc/apt/sources.list.d/jessie.list
+
+RUN apt update \
+    && apt install libssl1.0.0 
+
+RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - \
+    && curl https://packages.microsoft.com/config/ubuntu/16.04/prod.list | tee /etc/apt/sources.list.d/msprod.list 
+
+RUN apt-get update -yqq \
+    && apt-get install -yqq mssql-tools unixodbc-dev
+
+RUN pip install -U pip setuptools wheel \
     && pip install pytz \
     && pip install pyOpenSSL \
     && pip install ndg-httpsclient \
     && pip install pyasn1 \
-    && pip install apache-airflow[crypto,celery,postgres,hive,jdbc,mysql,ssh${AIRFLOW_DEPS:+,}${AIRFLOW_DEPS}]==${AIRFLOW_VERSION} \
+    && pip install apache-airflow[crypto,celery,ssh${AIRFLOW_DEPS:+,}${AIRFLOW_DEPS}]==${AIRFLOW_VERSION} \
     && pip install 'redis>=2.10.5,<3' \
-    && if [ -n "${PYTHON_DEPS}" ]; then pip install ${PYTHON_DEPS}; fi \
-    && apt-get purge --auto-remove -yqq $buildDeps \
+    && if [ -n "${PYTHON_DEPS}" ]; then pip install ${PYTHON_DEPS}; fi
+
+RUN apt-get purge --auto-remove -yqq $buildDeps \
     && apt-get autoremove -yqq --purge \
     && apt-get clean \
     && rm -rf \
@@ -74,6 +98,12 @@ COPY script/entrypoint.sh /entrypoint.sh
 COPY config/airflow.cfg ${AIRFLOW_HOME}/airflow.cfg
 
 RUN chown -R airflow: ${AIRFLOW_HOME}
+# RUN echo "[ODBC Driver 17 for SQL Server]\n\
+# Description=Microsoft ODBC Driver 17 for SQL Server\n\
+# Driver=/opt/microsoft/msodbcsql17/lib64/libmsodbcsql-17.2.so.0.1" >> /etc/odbcinst.ini
+
+RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bash_profile 
+RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bashrc
 
 EXPOSE 8080 5555 8793
 
