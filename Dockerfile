@@ -4,7 +4,7 @@
 # BUILD: docker build --rm -t alexhagerman/docker-airflow .
 # SOURCE: https://github.com/alexhagerman/docker-airflow
 
-FROM python:3.6-slim
+FROM continuumio/miniconda3
 LABEL maintainer="Alex Hagerman"
 
 # Never prompts the user for choices on installation/configuration of packages
@@ -16,6 +16,7 @@ ARG AIRFLOW_VERSION=1.10.1
 ARG AIRFLOW_HOME=/usr/local/airflow
 ARG AIRFLOW_DEPS=""
 ARG PYTHON_DEPS="pyodbc"
+ARG CONDA_DEPS=""
 ENV AIRFLOW_GPL_UNIDECODE yes
 
 # Define en_US.
@@ -74,13 +75,19 @@ RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - \
 RUN apt-get update -yqq \
     && apt-get install -yqq mssql-tools unixodbc-dev
 
+# Setup Intel Python with miniconda
+RUN conda config --add channels intel\
+    && conda config --add channels conda-forge \
+    && conda install  -y -q intelpython3_core=2019.1 python=3 \
+    && conda clean --all \
+    && if [ -n "${CONDA_DEPS}" ]; then conda install ${CONDA_DEPS}; fi
+
 RUN pip install -U pip setuptools wheel \
     && pip install pytz \
     && pip install pyOpenSSL \
     && pip install ndg-httpsclient \
     && pip install pyasn1 \
     && pip install apache-airflow[crypto,celery,ssh${AIRFLOW_DEPS:+,}${AIRFLOW_DEPS}]==${AIRFLOW_VERSION} \
-    && pip install 'redis>=2.10.5,<3' \
     && if [ -n "${PYTHON_DEPS}" ]; then pip install ${PYTHON_DEPS}; fi
 
 RUN apt-get purge --auto-remove -yqq $buildDeps \
@@ -98,9 +105,6 @@ COPY script/entrypoint.sh /entrypoint.sh
 COPY config/airflow.cfg ${AIRFLOW_HOME}/airflow.cfg
 
 RUN chown -R airflow: ${AIRFLOW_HOME}
-# RUN echo "[ODBC Driver 17 for SQL Server]\n\
-# Description=Microsoft ODBC Driver 17 for SQL Server\n\
-# Driver=/opt/microsoft/msodbcsql17/lib64/libmsodbcsql-17.2.so.0.1" >> /etc/odbcinst.ini
 
 RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bash_profile 
 RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bashrc

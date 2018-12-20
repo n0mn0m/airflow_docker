@@ -8,8 +8,8 @@ This repository contains **Dockerfile** of [apache-airflow](https://github.com/a
 
 ## Informations
 
-* Based on Python (3.6-slim) official Image [python:3.6-slim](https://hub.docker.com/_/python/) and uses the official [Postgres](https://hub.docker.com/_/postgres/) as backend and [Redis](https://hub.docker.com/_/redis/) as queue
-* Install [Docker](https://www.docker.com/)
+* Based on [Miniconda](https://hub.docker.com/r/continuumio/miniconda3/)  using  [MS SQL Server](https://hub.docker.com/r/microsoft/mssql-server) for the  backend and [RabbitMQ](https://hub.docker.com/_/rabbitmq/) 
+* Install [Docker](https://docs.docker.com/install/)
 * Install [Docker Compose](https://docs.docker.com/compose/install/)
 * Following the Airflow release from [Python Package Index](https://pypi.python.org/pypi/apache-airflow)
 
@@ -21,14 +21,16 @@ Pull the image from the Docker repository.
 
 ## Build
 
-Optionally install [Extra Airflow Packages](https://airflow.incubator.apache.org/installation.html#extra-package) and/or python dependencies at build time :
+Optionally install [Extra Airflow Packages](https://airflow.incubator.apache.org/installation.html#extra-package) and/or python/conda dependencies at build time :
 
     docker build --rm --build-arg AIRFLOW_DEPS="datadog,dask" -t alexhagerman/docker-airflow .
     docker build --rm --build-arg PYTHON_DEPS="flask_oauthlib>=0.9" -t alexhagerman/docker-airflow .
+    docker build --rm --build-arg CONDA_DEPS="hdfs3 libhdfs3" -t alexhagerman/docker-airflow .
+
 
 or combined
 
-    docker build --rm --build-arg AIRFLOW_DEPS="datadog,dask" --build-arg PYTHON_DEPS="flask_oauthlib>=0.9" -t alexhagerman/docker-airflow .
+    docker build --rm --build-arg AIRFLOW_DEPS="datadog,dask" --build-arg PYTHON_DEPS="flask_oauthlib>=0.9" CONDA_DEPS="libhdfs3" -t alexhagerman/docker-airflow .
 
 Don't forget to update the airflow images in the docker-compose files to alexhagerman/docker-airflow:latest.
 
@@ -55,7 +57,7 @@ NB : If you want to have DAGs example loaded (default=False), you've to set the 
     docker run -d -p 8080:8080 -e LOAD_EX=y alexhagerman/docker-airflow
 
 If you want to use Ad hoc query, make sure you've configured connections:
-Go to Admin -> Connections and Edit "postgres_default" set this values (equivalent to values in airflow.cfg/docker-compose*.yml) :
+Go to Admin -> Connections and Edit "mssql_default" set this values (equivalent to values in airflow.cfg/docker-compose*.yml) :
 - Host : postgres
 - Schema : airflow
 - Login : airflow
@@ -65,7 +67,7 @@ For encrypted connection passwords (in Local or Celery Executor), you must have 
 
     docker run alexhagerman/docker-airflow python -c "from cryptography.fernet import Fernet; FERNET_KEY = Fernet.generate_key().decode(); print(FERNET_KEY)"
 
-## Configurating Airflow
+## Configuring Airflow
 
 It's possible to set any configuration value for Airflow from environment variables, which are used over values from the airflow.cfg.
 
@@ -73,7 +75,10 @@ The general rule is the environment variable should be named `AIRFLOW__<section>
 
 Check out the [Airflow documentation](http://airflow.readthedocs.io/en/latest/howto/set-config.html#setting-configuration-options) for more details
 
-You can also define connections via environment variables by prefixing them with `AIRFLOW_CONN_` - for example `AIRFLOW_CONN_POSTGRES_MASTER=postgres://user:password@localhost:5432/master` for a connection called "postgres_master". The value is parsed as a URI. This will work for hooks etc, but won't show up in the "Ad-hoc Query" section unless an (empty) connection is also created in the DB
+You can also define connections via environment variables by prefixing them with `AIRFLOW_CONN_` - for example `AIRFLOW_CONN_MSSQL_MASTER=mssql+pyodbc://user:password@localhost:1433/master?driver` for a connection called "mssql_master". The value is parsed as a URI. This will work for hooks etc, but won't show up in the "Ad-hoc Query" section unless an (empty) connection is also created in the DB
+
+## Configuring the Docker Environment
+`docker-compose` supports using a `.env` file to setup default environment variables. A sample `.env-template` is available in the repo. Using this file allows you to define your airflow, celery and rabbitmq default settings in one location.
 
 ## Custom Airflow plugins
 
@@ -104,6 +109,7 @@ Easy scaling using docker-compose:
     docker-compose -f docker-compose-CeleryExecutor.yml scale worker=5
 
 This can be used to scale to a multi node setup using docker swarm.
+
 
 ## Running other airflow commands
 
